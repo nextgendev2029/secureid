@@ -69,44 +69,119 @@ loginTogglePwd.addEventListener('click', function() {
 
 function setupOtpInputs(containerId, onComplete) {
   const container = document.getElementById(containerId);
-  if (!container) return;
+  if (!container || container.dataset.otpInitialized) return;
+  container.dataset.otpInitialized = 'true';
   const boxes = container.querySelectorAll('.otp-box');
 
   boxes.forEach((box, index) => {
-    box.addEventListener('input', function() {
-      this.value = this.value.replace(/[^0-9]/g, '');
-      if (this.value.length === 1) {
+    box.addEventListener('focus', function() {
+      this.select();
+    });
+
+    box.addEventListener('keydown', function(e) {
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        this.value = e.key;
+        this.classList.remove('error');
         if (index < boxes.length - 1) {
           boxes[index + 1].focus();
+          boxes[index + 1].select();
         } else {
           this.blur();
-          if (onComplete) {
-            const code = Array.from(boxes).map(b => b.value).join('');
+          const code = Array.from(boxes).map(b => b.value).join('');
+          if (code.length === boxes.length && onComplete) {
+            onComplete(code);
+          }
+        }
+        return;
+      }
+
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        this.classList.remove('error');
+        if (this.value !== '') {
+          this.value = '';
+        } else if (index > 0) {
+          boxes[index - 1].value = '';
+          boxes[index - 1].classList.remove('error');
+          boxes[index - 1].focus();
+          boxes[index - 1].select();
+        }
+        return;
+      }
+
+      if (e.key === 'Delete') {
+        e.preventDefault();
+        this.value = '';
+        this.classList.remove('error');
+        return;
+      }
+
+      if (e.key === 'ArrowLeft' && index > 0) {
+        e.preventDefault();
+        boxes[index - 1].focus();
+        boxes[index - 1].select();
+        return;
+      }
+
+      if (e.key === 'ArrowRight' && index < boxes.length - 1) {
+        e.preventDefault();
+        boxes[index + 1].focus();
+        boxes[index + 1].select();
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const code = Array.from(boxes).map(b => b.value).join('');
+        if (code.length === boxes.length && onComplete) {
+          onComplete(code);
+        }
+        return;
+      }
+
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+      }
+    });
+
+    box.addEventListener('input', function() {
+      const digits = this.value.replace(/[^0-9]/g, '');
+      this.value = digits.slice(-1);
+      if (this.value) {
+        this.classList.remove('error');
+        if (index < boxes.length - 1) {
+          boxes[index + 1].focus();
+          boxes[index + 1].select();
+        } else {
+          this.blur();
+          const code = Array.from(boxes).map(b => b.value).join('');
+          if (code.length === boxes.length && onComplete) {
             onComplete(code);
           }
         }
       }
     });
 
-    box.addEventListener('keydown', function(e) {
-      if (e.key === 'Backspace' && this.value.length === 0 && index > 0) {
-        boxes[index - 1].focus();
-      }
-    });
-
     box.addEventListener('paste', function(e) {
       e.preventDefault();
-      const pasteData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
-      if (!pasteData) return;
+      const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+      const digits = text.replace(/[^0-9]/g, '');
+      if (!digits) return;
+      const start = digits.length >= boxes.length ? 0 : index;
       for (let i = 0; i < boxes.length; i++) {
-        if (pasteData[i]) {
-          boxes[i].value = pasteData[i];
+        if (i >= start && (i - start) < digits.length) {
+          boxes[i].value = digits[i - start];
+          boxes[i].classList.remove('error');
         }
       }
-      const lastIndex = Math.min(pasteData.length - 1, boxes.length - 1);
-      boxes[lastIndex].focus();
-      if (pasteData.length >= boxes.length && onComplete) {
-        onComplete(pasteData.slice(0, boxes.length));
+      const nextIndex = Math.min(start + digits.length, boxes.length - 1);
+      boxes[nextIndex].focus();
+      boxes[nextIndex].select();
+      const code = Array.from(boxes).map(b => b.value).join('');
+      if (code.length === boxes.length && onComplete) {
+        boxes[boxes.length - 1].blur();
+        onComplete(code);
       }
     });
   });
@@ -172,11 +247,11 @@ function showRegState(stateKey) {
     document.getElementById('reg-email-active-section').style.display = 'block';
     document.getElementById('reg-email-expired-section').style.display = 'none';
     const boxes = document.querySelectorAll('#reg-email-otp-boxes .otp-box');
-    const demoValues = ['4', '8', '2', '9', '1', '3'];
-    boxes.forEach((box, i) => {
+    boxes.forEach(box => {
       box.classList.remove('error');
-      box.value = demoValues[i];
+      box.value = '';
     });
+    if (boxes[0]) boxes[0].focus();
   } else if (stateKey === '2a') {
     setRegStepper(2);
     showRegScreen('reg-screen-email', false);
@@ -188,10 +263,17 @@ function showRegState(stateKey) {
     document.getElementById('reg-email-timer').textContent = '01:15';
     const boxes = document.querySelectorAll('#reg-email-otp-boxes .otp-box');
     const demoValues = ['4', '8', '2', '9', '1', '0'];
+    const hasValues = Array.from(boxes).some(b => b.value !== '');
     boxes.forEach((box, i) => {
       box.classList.add('error');
-      box.value = demoValues[i];
+      if (!hasValues) {
+        box.value = demoValues[i];
+      }
     });
+    if (boxes[boxes.length - 1]) {
+      boxes[boxes.length - 1].focus();
+      boxes[boxes.length - 1].select();
+    }
   } else if (stateKey === '2b') {
     setRegStepper(2);
     showRegScreen('reg-screen-email', false);
@@ -217,6 +299,7 @@ function showRegState(stateKey) {
       box.classList.remove('error');
       box.value = '';
     });
+    if (boxes[0]) boxes[0].focus();
   } else if (stateKey === '3a') {
     setRegStepper(3);
     showRegScreen('reg-screen-mobile', false);
@@ -229,10 +312,17 @@ function showRegState(stateKey) {
     document.getElementById('reg-mobile-timer').textContent = '01:02';
     const boxes = document.querySelectorAll('#reg-mobile-otp-boxes .otp-box');
     const demoValues = ['1', '2', '3', '4', '5', '6'];
+    const hasValues = Array.from(boxes).some(b => b.value !== '');
     boxes.forEach((box, i) => {
       box.classList.add('error');
-      box.value = demoValues[i];
+      if (!hasValues) {
+        box.value = demoValues[i];
+      }
     });
+    if (boxes[boxes.length - 1]) {
+      boxes[boxes.length - 1].focus();
+      boxes[boxes.length - 1].select();
+    }
   } else if (stateKey === '3b') {
     setRegStepper(3);
     showRegScreen('reg-screen-mobile', false);
@@ -262,6 +352,7 @@ function showRegState(stateKey) {
       box.classList.remove('error');
       box.value = '';
     });
+    if (boxes[0]) boxes[0].focus();
   } else if (stateKey === '6a') {
     setRegStepper(4);
     showRegScreen('reg-screen-mfa-verify', false);
@@ -270,10 +361,17 @@ function showRegState(stateKey) {
     document.getElementById('reg-mfa-timer').textContent = '00:10';
     const boxes = document.querySelectorAll('#reg-mfa-otp-boxes .otp-box');
     const demoValues = ['6', '2', '4', '1', '1', '1'];
+    const hasValues = Array.from(boxes).some(b => b.value !== '');
     boxes.forEach((box, i) => {
       box.classList.add('error');
-      box.value = demoValues[i];
+      if (!hasValues) {
+        box.value = demoValues[i];
+      }
     });
+    if (boxes[boxes.length - 1]) {
+      boxes[boxes.length - 1].focus();
+      boxes[boxes.length - 1].select();
+    }
   } else if (stateKey === '7') {
     setRegStepper(5);
     showRegScreen('reg-screen-success', false);
@@ -305,11 +403,11 @@ function showLoginState(stateKey) {
     document.getElementById('login-otp-normal-section').style.display = 'block';
     document.getElementById('login-otp-expired-section').style.display = 'none';
     const boxes = document.querySelectorAll('#login-otp-boxes .otp-box');
-    const demoValues = ['4', '8', '2', '9', '1', '3'];
-    boxes.forEach((box, i) => {
+    boxes.forEach(box => {
       box.classList.remove('error');
-      box.value = demoValues[i];
+      box.value = '';
     });
+    if (boxes[0]) boxes[0].focus();
   } else if (stateKey === '5') {
     showLoginScreen('login-screen-otp');
     document.getElementById('login-otp-error').style.display = 'block';
@@ -318,10 +416,17 @@ function showLoginState(stateKey) {
     document.getElementById('login-timer').textContent = '02:12';
     const boxes = document.querySelectorAll('#login-otp-boxes .otp-box');
     const demoValues = ['4', '8', '2', '9', '1', '4'];
+    const hasValues = Array.from(boxes).some(b => b.value !== '');
     boxes.forEach((box, i) => {
       box.classList.add('error');
-      box.value = demoValues[i];
+      if (!hasValues) {
+        box.value = demoValues[i];
+      }
     });
+    if (boxes[boxes.length - 1]) {
+      boxes[boxes.length - 1].focus();
+      boxes[boxes.length - 1].select();
+    }
   } else if (stateKey === '6') {
     showLoginScreen('login-screen-otp');
     document.getElementById('login-otp-error').style.display = 'none';
@@ -407,10 +512,11 @@ regForm.addEventListener('submit', async function(e) {
     return;
   }
 
+  const mobileVal = (regMobile.value || '').trim();
   const payload = {
-    fullName: (document.getElementById('reg-name').value || 'Priya Sharma').trim(),
-    email: (regEmail.value || 'priya.sharma@email.com').trim(),
-    mobile: `${regCountry.value} ${(regMobile.value || '98765 43210').trim()}`,
+    fullName: (document.getElementById('reg-name').value || '').trim(),
+    email: (regEmail.value || '').trim(),
+    mobile: mobileVal ? `${regCountry.value} ${mobileVal}` : '',
     password: val
   };
 
@@ -525,7 +631,7 @@ setupOtpInputs('reg-mobile-otp-boxes', async function(code) {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showRegState('4');
+      showRegState('7');
     } else {
       if (data.status === 'MAX_ATTEMPTS') {
         showRegState('3b');
@@ -649,6 +755,13 @@ document.getElementById('reg-btn-email-resend').addEventListener('click', async 
   showRegState('2');
 });
 
+const regEmailResendLink = document.getElementById('reg-email-resend');
+if (regEmailResendLink) {
+  regEmailResendLink.addEventListener('click', function() {
+    document.getElementById('reg-btn-email-resend').click();
+  });
+}
+
 document.getElementById('reg-btn-mobile-resend').addEventListener('click', async function() {
   const mobile = `${regCountry.value} ${(regMobile.value || '98765 43210').trim()}`;
   try {
@@ -665,6 +778,13 @@ document.getElementById('reg-btn-mobile-resend').addEventListener('click', async
   showRegState('3');
 });
 
+const regMobileResendLink = document.getElementById('reg-mobile-resend');
+if (regMobileResendLink) {
+  regMobileResendLink.addEventListener('click', function() {
+    document.getElementById('reg-btn-mobile-resend').click();
+  });
+}
+
 document.getElementById('btn-login-resend').addEventListener('click', async function() {
   const email = (loginUser.value || 'priya.sharma@email.com').trim();
   try {
@@ -680,6 +800,13 @@ document.getElementById('btn-login-resend').addEventListener('click', async func
   } catch (e) {}
   showLoginState('4');
 });
+
+const loginResendLink = document.getElementById('login-resend');
+if (loginResendLink) {
+  loginResendLink.addEventListener('click', function() {
+    document.getElementById('btn-login-resend').click();
+  });
+}
 
 document.getElementById('reg-change-phone').addEventListener('click', function(e) {
   e.preventDefault();
